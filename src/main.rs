@@ -26,7 +26,7 @@ fn handle_client(mut stream: TcpStream) {
         if bytes_read == 0 {
             return;
         }
-        stream.write_all(&buf[0..bytes_read]).expect("Failed to write to client");
+        stream.write_all(b"+PONG\r\n").expect("Failed to write to client");
     }
 }
 
