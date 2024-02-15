@@ -79,6 +79,7 @@ fn handle_client(mut stream: TcpStream, db: Arc<Mutex<Database>>) -> anyhow::Res
                         let expiry = parts[10];
                         let millis = expiry.parse().expect("You didn't provde a time for the px parameter");
                         let exp_time = SystemTime::now() + Duration::from_millis(millis);
+                        
                         db.lock().expect("Failed to lock").set(key, (value, Some(exp_time)));
                     }else{
                         let key = parts[4];
