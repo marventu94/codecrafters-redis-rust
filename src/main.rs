@@ -72,7 +72,7 @@ fn handle_client(mut stream: TcpStream, db: Arc<Mutex<Database>>) -> anyhow::Res
                     stream.flush()?;
                 }
                 "set" if parts.len() >= 6 => {
-                    if parts[8] == "px" {
+                    if parts.len() > 8 && parts[8] == "px" {
                         let key = parts[4];
                         let value = parts[6];
                         // expiry
