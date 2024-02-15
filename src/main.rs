@@ -3,10 +3,11 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::{thread, str};
+use std::time::{Duration, SystemTime};
 
 
 struct Database {
-    db: HashMap<String, String>,
+    db: HashMap<String, (String, Option<SystemTime>)>,
 }
 
 impl Database {
@@ -14,12 +15,12 @@ impl Database {
         Database { db: HashMap::new() }    
     }
 
-    fn get(&self, key: &str) -> Option<&String> {
+    fn get(&self, key: &str) -> Option<&(String, Option<SystemTime>)> {
         self.db.get(key)
     }
 
-    fn set(&mut self, key: &str, value: &str) -> Option<String> {
-        self.db.insert(key.to_owned(), value.to_owned())
+    fn set(&mut self, key: &str, value: (&str, Option<SystemTime>)) -> Option<(String, Option<SystemTime>)> {
+        self.db.insert(key.to_owned(), (value.0.to_owned(), value.1))
     }
 }
 
@@ -71,9 +72,19 @@ fn handle_client(mut stream: TcpStream, db: Arc<Mutex<Database>>) -> anyhow::Res
                     stream.flush()?;
                 }
                 "set" if parts.len() >= 6 => {
-                    let key = parts[4];
-                    let value = parts[6];
-                    db.lock().expect("Failed to lock").set(key, value);
+                    if parts[8] == "px" {
+                        let key = parts[4];
+                        let value = parts[6];
+                        // expiry
+                        let expiry = parts[8];
+                        let millis = expiry.parse().expect("You didn't provde a time for the px parameter");
+                        let exp_time = SystemTime::now() + Duration::from_millis(millis);
+                        db.lock().expect("Failed to lock").set(key, (value, Some(exp_time)));
+                    }else{
+                        let key = parts[4];
+                        let value = parts[6];
+                        db.lock().expect("Failed to lock").set(key, (value, Option::None));
+                    }
                     let reply = format!("${}\r\n{}\r\n", "OK".len(), "OK");
                     stream.write_all(reply.as_bytes()).unwrap();
                 }
@@ -81,8 +92,14 @@ fn handle_client(mut stream: TcpStream, db: Arc<Mutex<Database>>) -> anyhow::Res
                     let key = parts[4];
                     match db.lock().expect("Failed to lock").get(key) {
                         Some(reply) => {
-                            let reply = format!("${}\r\n{}\r\n", reply.len(), reply);
-                            stream.write_all(reply.as_bytes()).unwrap();
+                            if let Some(exp_time) = reply.1 {
+                                let time = SystemTime::now();
+                                if time > exp_time {
+                                    stream.write_all(b"$-1\r\n").unwrap();
+                                } else {
+                                    stream.write_all(format!("+{}\r\n", reply.0.to_string()).as_bytes()).unwrap();
+                                }
+                            }
                         }
                         None => {
                             let reply = format!("${}\r\n{}\r\n", "(nil)".len(), "(nil)");
