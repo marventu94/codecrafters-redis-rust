@@ -99,6 +99,8 @@ fn handle_client(mut stream: TcpStream, db: Arc<Mutex<Database>>) -> anyhow::Res
                                 } else {
                                     stream.write_all(format!("+{}\r\n", reply.0.to_string()).as_bytes()).unwrap();
                                 }
+                            } else {
+                                stream.write_all(format!("+{}\r\n", reply.0.to_string()).as_bytes()).unwrap();
                             }
                         }
                         None => {
