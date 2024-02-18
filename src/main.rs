@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::ops::Add;
 use std::sync::{Arc, Mutex};
 use std::{thread, str};
 use std::env;
@@ -157,16 +156,15 @@ fn handle_client(mut stream: TcpStream, server: Arc<Mutex<Server>>) -> anyhow::R
                     };
                 }
                 "info" if parts.len() >= 5 && parts[4] == "replication" => {
-                    let mut response = format!("*3\r\n");
+                    let mut response = String::new();
                     if server.lock().unwrap().replica_of == None {
-                        response = response.add(&format!("$11\r\nrole:master\r\n"));
+                        response.push_str(&format!("role:master\r\n"));
                     } else {
-                        response = response.add(&format!("$10\r\nrole:slave\r\n"));
+                        response.push_str(&format!("role:slave\r\n"));
                     }
-                    response = response.add(&format!("$54\r\nmaster_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb\r\n"))
-                                       .add(&format!("$20\r\nmaster_repl_offset:0\r\n"));
-                    println!("{}",response);
-                    stream.write_all(response.as_bytes())?;
+                    response.push_str(&format!("master_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb\r\n"));
+                    response.push_str(&format!("master_repl_offset:0\r\n"));
+                    stream.write_all(format!("${}\r\n{}\r\n", response.len(), response).as_bytes())?;
                     stream.flush()?;
                 }
                 _ => {
