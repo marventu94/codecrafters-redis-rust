@@ -3,6 +3,7 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::{thread, str};
+use std::env;
 use std::time::{Duration, SystemTime};
 
 
@@ -25,8 +26,18 @@ impl Database {
 }
 
 
+
+fn parse_cli_port() -> Option<u16> {
+    let index = env::args().position(|x| x == "--port")?;
+    let value = env::args().nth(index + 1)?;
+    value.parse().ok()
+}
+
+
 fn main() -> anyhow::Result<()> {
-    let listener = TcpListener::bind("127.0.0.1:6379").unwrap();
+    let port = parse_cli_port().unwrap_or(6379);
+
+    let listener = TcpListener::bind(("127.0.0.1", port)).unwrap();
     let db = Arc::new(Mutex::new(Database::new()));
     
     for stream in listener.incoming() {
