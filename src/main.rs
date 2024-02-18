@@ -121,6 +121,11 @@ fn handle_client(mut stream: TcpStream, db: Arc<Mutex<Database>>) -> anyhow::Res
                         }
                     };
                 }
+                "info" if parts.len() >= 5 && parts[4] == "replication" => {
+                    let response = format!("$11\r\nrole:master\r\n");
+                    stream.write_all(response.as_bytes())?;
+                    stream.flush()?;
+                }
                 _ => {
                     // Response with null
                     stream.write_all("-1\r\n".as_bytes())?;
