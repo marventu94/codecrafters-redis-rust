@@ -157,11 +157,13 @@ fn handle_client(mut stream: TcpStream, server: Arc<Mutex<Server>>) -> anyhow::R
                 }
                 "info" if parts.len() >= 5 && parts[4] == "replication" => {
                     let response;
+                    println!("11111");
                     if server.lock().unwrap().replica_of == None {
                         response = format!("$11\r\nrole:master\r\n");
                     } else {
-                        response = format!("$11\r\nrole:slave\r\n");
+                        response = format!("$10\r\nrole:slave\r\n");
                     }
+                    println!("{}",response);
                     stream.write_all(response.as_bytes())?;
                     stream.flush()?;
                 }
