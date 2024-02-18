@@ -6,6 +6,25 @@ use std::{thread, str};
 use std::env;
 use std::time::{Duration, SystemTime};
 
+struct Server {
+    db: Database,
+    replica_of: Option<(String, String)>,
+}
+
+impl Server {
+    fn new() -> Server {
+        Server {
+            db: Database::new(),
+            replica_of: None,
+        }
+    }
+    fn as_replica_of(&self, host: String, port: String) -> Server {
+        Server {
+            db: Database::new(),
+            replica_of: Some((host, port)),
+        }
+    }
+}
 
 struct Database {
     db: HashMap<String, (String, Option<SystemTime>)>,
@@ -36,17 +55,32 @@ fn parse_cli_port() -> Option<u16> {
 
 fn main() -> anyhow::Result<()> {
     let port = parse_cli_port().unwrap_or(6379);
-
     let listener = TcpListener::bind(("127.0.0.1", port)).unwrap();
-    let db = Arc::new(Mutex::new(Database::new()));
+
+    // --replicaof <host> <port>
+    let mut replica_of: Option<(String, String)> = None;
+    if let Some(index) = env::args().position(|arg| arg == "--replicaof") {
+        if env::args().len() < index + 3 {
+            panic!("--replicaof requires 2 arguments");
+        }
+        let host = env::args().nth(index + 1).clone().unwrap();
+        let port = env::args().nth(index + 2).clone().unwrap();
+        replica_of = Some((host, port));
+    }
+
+    let server = if let Some((host, port)) = replica_of {
+        Arc::new(Mutex::new(Server::new().as_replica_of(host, port)))
+    } else {
+        Arc::new(Mutex::new(Server::new()))
+    };
     
     for stream in listener.incoming() {
         match stream {
             Ok(_stream) => {
                 println!("accepted new connection"); 
-                let db_clone = Arc::clone(&db);
+                let server_clone = Arc::clone(&server);
                 thread::spawn(move || {
-                    let _ = handle_client(_stream, db_clone);
+                    let _ = handle_client(_stream, server_clone);
                 });
             }
             Err(e) => {
@@ -57,7 +91,7 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn handle_client(mut stream: TcpStream, db: Arc<Mutex<Database>>) -> anyhow::Result<()> {
+fn handle_client(mut stream: TcpStream, server: Arc<Mutex<Server>>) -> anyhow::Result<()> {
     let mut buf = [0; 512];
 
     loop {
@@ -91,18 +125,18 @@ fn handle_client(mut stream: TcpStream, db: Arc<Mutex<Database>>) -> anyhow::Res
                         let millis = expiry.parse().expect("You didn't provde a time for the px parameter");
                         let exp_time = SystemTime::now() + Duration::from_millis(millis);
                         
-                        db.lock().expect("Failed to lock").set(key, (value, Some(exp_time)));
+                        server.lock().unwrap().db.set(key, (value, Some(exp_time)));
                     }else{
                         let key = parts[4];
                         let value = parts[6];
-                        db.lock().expect("Failed to lock").set(key, (value, Option::None));
+                        server.lock().unwrap().db.set(key, (value, Option::None));
                     }
                     let reply = format!("${}\r\n{}\r\n", "OK".len(), "OK");
                     stream.write_all(reply.as_bytes()).unwrap();
                 }
                 "get" => {
                     let key = parts[4];
-                    match db.lock().expect("Failed to lock").get(key) {
+                    match server.lock().unwrap().db.get(key) {
                         Some(reply) => {
                             if let Some(exp_time) = reply.1 {
                                 let time = SystemTime::now();
@@ -122,7 +156,12 @@ fn handle_client(mut stream: TcpStream, db: Arc<Mutex<Database>>) -> anyhow::Res
                     };
                 }
                 "info" if parts.len() >= 5 && parts[4] == "replication" => {
-                    let response = format!("$11\r\nrole:master\r\n");
+                    let response;
+                    if server.lock().unwrap().replica_of == None {
+                        response = format!("$11\r\nrole:master\r\n");
+                    } else {
+                        response = format!("$11\r\nrole:slave\r\n");
+                    }
                     stream.write_all(response.as_bytes())?;
                     stream.flush()?;
                 }
