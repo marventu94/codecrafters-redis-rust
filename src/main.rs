@@ -69,6 +69,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     let server = if let Some((host, port)) = replica_of {
+        handle_ping_command_slave(&format!("{}:{}", host, port));
         Arc::new(Mutex::new(Server::new().as_replica_of(host, port)))
     } else {
         Arc::new(Mutex::new(Server::new()))
@@ -175,5 +176,11 @@ fn handle_client(mut stream: TcpStream, server: Arc<Mutex<Server>>) -> anyhow::R
             }
         }
     }
+}
+
+fn handle_ping_command_slave(url: &str){
+    let mut remote_stream = TcpStream::connect(url).unwrap();
+    let msg = b"*1\r\n$4\r\nping\r\n";
+    remote_stream.write_all(msg).unwrap();
 }
 
