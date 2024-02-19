@@ -196,7 +196,7 @@ fn handle_replconf_command_slave(stream: &mut TcpStream, port: String){
     let _ = stream.flush();
     let msg2 = "*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n";
     let _ = stream.write_all(msg2.as_bytes());
-    let _ = stream.flush();
+    //let _ = stream.flush();
 }
 
 fn handle_psync_command_slave(stream: &mut TcpStream){
