@@ -172,17 +172,17 @@ fn handle_client(mut stream: TcpStream, server: Arc<Mutex<Server>>) -> anyhow::R
                     response.push_str(&format!("master_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb\r\n"));
                     response.push_str(&format!("master_repl_offset:0\r\n"));
                     stream.write_all(format!("${}\r\n{}\r\n", response.len(), response).as_bytes())?;
-                    stream.flush()?;
+                    stream.flush()?
                 }
                 "replconf" => {
                     let _ = stream.write_all(b"+OK\r\n");
-                    let _ = stream.flush();
+                    stream.flush()?
                 },
-                "psyc" => {
+                "psync" => {
                     let msg = "+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0";
                     let msg_reso = format!("${}\r\n{}\r\n", msg.len(), msg);
                     let _ = stream.write_all(msg_reso.as_bytes());
-                    let _ = stream.flush();
+                    stream.flush()?
                 }
                 _ => {
                     // Response with null
