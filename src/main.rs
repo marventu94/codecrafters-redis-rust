@@ -110,14 +110,15 @@ fn handle_client(mut stream: TcpStream, server: Arc<Mutex<Server>>) -> anyhow::R
         if parts.len() >= 3 && parts[0].starts_with('*') {
             match parts[2].to_ascii_lowercase().as_ref() {
                 "ping" => {
-                    let response = "+PONG\r\n";
-                    stream.write_all(response.as_bytes())?;
-                    stream.flush()?;
                     match &server.lock().unwrap().replica_of {
                         Some(url) => {
                             handle_replconf_command_slave(&mut stream, &url.1);
                         }
-                        None => {}
+                        None => {
+                            let response = "+PONG\r\n";
+                            stream.write_all(response.as_bytes())?;
+                            stream.flush()?;
+                        }
                     }
                 }
                 "echo" if parts.len() >= 5 => {
