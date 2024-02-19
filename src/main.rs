@@ -74,6 +74,7 @@ fn main() -> anyhow::Result<()> {
 
         handle_ping_command_slave(&mut remote_stream);
         handle_replconf_command_slave(&mut remote_stream, server_port.to_string());
+        handle_psync_command_slave(&mut remote_stream);
 
         Arc::new(Mutex::new(Server::new().as_replica_of(host, port)))
     } else {
@@ -195,5 +196,11 @@ fn handle_replconf_command_slave(stream: &mut TcpStream, port: String){
     let _ = stream.flush();
     let msg2 = "*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n";
     let _ = stream.write_all(msg2.as_bytes());
+    let _ = stream.flush();
+}
+
+fn handle_psync_command_slave(stream: &mut TcpStream){
+    let msg = b"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n";
+    let _ = stream.write_all(msg);
     let _ = stream.flush();
 }
