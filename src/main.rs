@@ -54,8 +54,8 @@ fn parse_cli_port() -> Option<u16> {
 
 
 fn main() -> anyhow::Result<()> {
-    let port = parse_cli_port().unwrap_or(6379);
-    let listener = TcpListener::bind(("127.0.0.1", port)).unwrap();
+    let server_port = parse_cli_port().unwrap_or(6379);
+    let listener = TcpListener::bind(("127.0.0.1", server_port)).unwrap();
 
     // --replicaof <host> <port>
     let mut replica_of: Option<(String, String)> = None;
@@ -73,8 +73,8 @@ fn main() -> anyhow::Result<()> {
         let mut remote_stream = TcpStream::connect(url).unwrap();
 
         handle_ping_command_slave(&mut remote_stream);
-        handle_replconf_command_slave(&mut remote_stream, &port);
-        
+        handle_replconf_command_slave(&mut remote_stream, server_port.to_string());
+
         Arc::new(Mutex::new(Server::new().as_replica_of(host, port)))
     } else {
         Arc::new(Mutex::new(Server::new()))
@@ -186,11 +186,14 @@ fn handle_client(mut stream: TcpStream, server: Arc<Mutex<Server>>) -> anyhow::R
 fn handle_ping_command_slave(stream: &mut TcpStream){
     let msg = b"*1\r\n$4\r\nping\r\n";
     stream.write_all(msg).unwrap();
+    let _ = stream.flush();
 }
 
-fn handle_replconf_command_slave(stream: &mut TcpStream, port: &str){
+fn handle_replconf_command_slave(stream: &mut TcpStream, port: String){
     let msg1 = format!("*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n${}\r\n{}\r\n",port.len(), port);
     let _ = stream.write_all(msg1.as_bytes());
+    let _ = stream.flush();
     let msg2 = "*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n";
     let _ = stream.write_all(msg2.as_bytes());
+    let _ = stream.flush();
 }
