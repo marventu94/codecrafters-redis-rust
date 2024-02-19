@@ -180,8 +180,7 @@ fn handle_client(mut stream: TcpStream, server: Arc<Mutex<Server>>) -> anyhow::R
                 },
                 "psyc" => {
                     let msg = "+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0";
-                    let msg_reso = format!("${}\r\n{}\r\n", msg.len(), msg);
-                    let _ = stream.write_all(msg_reso.as_bytes());
+                    let _ = stream.write_all(msg.as_bytes());
                 }
                 _ => {
                     // Response with null
