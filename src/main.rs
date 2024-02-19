@@ -178,8 +178,8 @@ fn handle_client(mut stream: TcpStream, server: Arc<Mutex<Server>>) -> anyhow::R
                     let _ = stream.write_all(b"+OK\r\n");
                     stream.flush()?
                 },
-                "PSYNC" => {
-                    let msg = b"+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n";
+                "psync" => {
+                    let msg = b"+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb  0\r\n";
                     let _ = stream.write_all(msg);
                     //stream.flush()?
                 }
