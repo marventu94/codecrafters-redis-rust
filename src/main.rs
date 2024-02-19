@@ -174,6 +174,10 @@ fn handle_client(mut stream: TcpStream, server: Arc<Mutex<Server>>) -> anyhow::R
                     stream.write_all(format!("${}\r\n{}\r\n", response.len(), response).as_bytes())?;
                     stream.flush()?;
                 }
+                "replconf" => {
+                    let _ = stream.write_all(b"+OK\r\n");
+                    let _ = stream.flush();
+                }
                 _ => {
                     // Response with null
                     stream.write_all("-1\r\n".as_bytes())?;
@@ -196,7 +200,6 @@ fn handle_replconf_command_slave(stream: &mut TcpStream, port: String){
     let _ = stream.flush();
     let msg2 = "*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n";
     let _ = stream.write_all(msg2.as_bytes());
-    //let _ = stream.flush();
 }
 
 fn handle_psync_command_slave(stream: &mut TcpStream){
