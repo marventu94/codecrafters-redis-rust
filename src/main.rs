@@ -179,9 +179,9 @@ fn handle_client(mut stream: TcpStream, server: Arc<Mutex<Server>>) -> anyhow::R
                     stream.flush()?
                 },
                 "psync" => {
-                    let msg = b"+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb  0\r\n";
+                    let msg = b"+FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0\r\n";
                     let _ = stream.write_all(msg);
-                    //stream.flush()?
+                    stream.flush()?
                 }
                 _ => {
                     // Response with null
@@ -210,5 +210,4 @@ fn handle_replconf_command_slave(stream: &mut TcpStream, port: String){
 fn handle_psync_command_slave(stream: &mut TcpStream){
     let msg = b"*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n";
     let _ = stream.write_all(msg);
-    let _ = stream.flush();
 }
