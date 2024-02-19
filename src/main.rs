@@ -1,10 +1,10 @@
 use std::collections::HashMap;
-use std::env;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
+use std::{thread, str};
+use std::env;
 use std::time::{Duration, SystemTime};
-use std::{str, thread};
 
 struct Server {
     db: Database,
@@ -32,28 +32,26 @@ struct Database {
 
 impl Database {
     fn new() -> Database {
-        Database { db: HashMap::new() }
+        Database { db: HashMap::new() }    
     }
 
     fn get(&self, key: &str) -> Option<&(String, Option<SystemTime>)> {
         self.db.get(key)
     }
 
-    fn set(
-        &mut self,
-        key: &str,
-        value: (&str, Option<SystemTime>),
-    ) -> Option<(String, Option<SystemTime>)> {
-        self.db
-            .insert(key.to_owned(), (value.0.to_owned(), value.1))
+    fn set(&mut self, key: &str, value: (&str, Option<SystemTime>)) -> Option<(String, Option<SystemTime>)> {
+        self.db.insert(key.to_owned(), (value.0.to_owned(), value.1))
     }
 }
+
+
 
 fn parse_cli_port() -> Option<u16> {
     let index = env::args().position(|x| x == "--port")?;
     let value = env::args().nth(index + 1)?;
     value.parse().ok()
 }
+
 
 fn main() -> anyhow::Result<()> {
     let port = parse_cli_port().unwrap_or(6379);
@@ -70,17 +68,22 @@ fn main() -> anyhow::Result<()> {
         replica_of = Some((host, port));
     }
 
-    let server = if let Some((host, port)) = replica_of {
-        handle_ping_command_slave(&format!("{}:{}", host, port));
+    let server: Arc<Mutex<Server>> = if let Some((host, port)) = replica_of {
+        let url = &format!("{}:{}", host, port);
+        let mut remote_stream = TcpStream::connect(url).unwrap();
+
+        handle_ping_command_slave(&mut remote_stream);
+        handle_replconf_command_slave(&mut remote_stream, &port);
+        
         Arc::new(Mutex::new(Server::new().as_replica_of(host, port)))
     } else {
         Arc::new(Mutex::new(Server::new()))
     };
-
+    
     for stream in listener.incoming() {
         match stream {
             Ok(_stream) => {
-                println!("accepted new connection");
+                println!("accepted new connection"); 
                 let server_clone = Arc::clone(&server);
                 thread::spawn(move || {
                     let _ = handle_client(_stream, server_clone);
@@ -110,16 +113,9 @@ fn handle_client(mut stream: TcpStream, server: Arc<Mutex<Server>>) -> anyhow::R
         if parts.len() >= 3 && parts[0].starts_with('*') {
             match parts[2].to_ascii_lowercase().as_ref() {
                 "ping" => {
-                    match &server.lock().unwrap().replica_of {
-                        Some(url) => {
-                            handle_replconf_command_slave(&mut stream, &url.1);
-                        }
-                        None => {
-                            let response = "+PONG\r\n";
-                            stream.write_all(response.as_bytes())?;
-                            stream.flush()?;
-                        }
-                    }
+                    let response = "+PONG\r\n";
+                    stream.write_all(response.as_bytes())?;
+                    stream.flush()?;
                 }
                 "echo" if parts.len() >= 5 => {
                     let response = format!("${}\r\n{}\r\n", parts[4].len(), parts[4]);
@@ -132,13 +128,11 @@ fn handle_client(mut stream: TcpStream, server: Arc<Mutex<Server>>) -> anyhow::R
                         let value = parts[6];
                         // expiry
                         let expiry = parts[10];
-                        let millis = expiry
-                            .parse()
-                            .expect("You didn't provde a time for the px parameter");
+                        let millis = expiry.parse().expect("You didn't provde a time for the px parameter");
                         let exp_time = SystemTime::now() + Duration::from_millis(millis);
-
+                        
                         server.lock().unwrap().db.set(key, (value, Some(exp_time)));
-                    } else {
+                    }else{
                         let key = parts[4];
                         let value = parts[6];
                         server.lock().unwrap().db.set(key, (value, Option::None));
@@ -155,16 +149,10 @@ fn handle_client(mut stream: TcpStream, server: Arc<Mutex<Server>>) -> anyhow::R
                                 if time > exp_time {
                                     stream.write_all(b"$-1\r\n").unwrap();
                                 } else {
-                                    stream
-                                        .write_all(
-                                            format!("+{}\r\n", reply.0.to_string()).as_bytes(),
-                                        )
-                                        .unwrap();
+                                    stream.write_all(format!("+{}\r\n", reply.0.to_string()).as_bytes()).unwrap();
                                 }
                             } else {
-                                stream
-                                    .write_all(format!("+{}\r\n", reply.0.to_string()).as_bytes())
-                                    .unwrap();
+                                stream.write_all(format!("+{}\r\n", reply.0.to_string()).as_bytes()).unwrap();
                             }
                         }
                         None => {
@@ -180,12 +168,9 @@ fn handle_client(mut stream: TcpStream, server: Arc<Mutex<Server>>) -> anyhow::R
                     } else {
                         response.push_str(&format!("role:slave\r\n"));
                     }
-                    response.push_str(&format!(
-                        "master_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb\r\n"
-                    ));
+                    response.push_str(&format!("master_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb\r\n"));
                     response.push_str(&format!("master_repl_offset:0\r\n"));
-                    stream
-                        .write_all(format!("${}\r\n{}\r\n", response.len(), response).as_bytes())?;
+                    stream.write_all(format!("${}\r\n{}\r\n", response.len(), response).as_bytes())?;
                     stream.flush()?;
                 }
                 _ => {
@@ -198,18 +183,13 @@ fn handle_client(mut stream: TcpStream, server: Arc<Mutex<Server>>) -> anyhow::R
     }
 }
 
-fn handle_ping_command_slave(url: &str) {
-    let mut remote_stream = TcpStream::connect(url).unwrap();
+fn handle_ping_command_slave(stream: &mut TcpStream){
     let msg = b"*1\r\n$4\r\nping\r\n";
-    remote_stream.write_all(msg).unwrap();
+    stream.write_all(msg).unwrap();
 }
 
-fn handle_replconf_command_slave(stream: &mut TcpStream, port: &str) {
-    let msg1 = format!(
-        "*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n${}\r\n{}\r\n",
-        port.len(),
-        port
-    );
+fn handle_replconf_command_slave(stream: &mut TcpStream, port: &str){
+    let msg1 = format!("*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n${}\r\n{}\r\n",port.len(), port);
     let _ = stream.write_all(msg1.as_bytes());
     let msg2 = "*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n";
     let _ = stream.write_all(msg2.as_bytes());
